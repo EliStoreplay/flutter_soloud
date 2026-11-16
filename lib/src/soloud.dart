@@ -1765,6 +1765,69 @@ interface class SoLoud {
     return _isVisualizationEnabled;
   }
 
+  /// Start copying the final mixed output (everything that is sent to the
+  /// playback device, after global filters and volume) into a ring buffer.
+  /// Read it with [readOutputTap], ie to stream it to a network speaker.
+  ///
+  /// Calling it again while enabled resets the buffer.
+  /// Not supported on the web.
+  ///
+  /// [bufferLength] how much audio the ring buffer holds. If it is not read
+  /// often enough, new audio is dropped (see [getOutputTapDroppedFrames]).
+  ///
+  /// Throws [SoLoudNotInitializedException] if the engine is not initialized.
+  void enableOutputTap({
+    Duration bufferLength = const Duration(seconds: 2),
+  }) {
+    if (!isInitialized) {
+      throw const SoLoudNotInitializedException();
+    }
+    final bufferFrames =
+        (bufferLength.inMicroseconds * _sampleRate) ~/
+        Duration.microsecondsPerSecond;
+    final error = _controller.soLoudFFI.enableOutputTap(bufferFrames);
+    _logPlayerError(error, from: 'enableOutputTap() result');
+    if (error != PlayerErrors.noError) {
+      throw SoLoudCppException.fromPlayerError(error);
+    }
+  }
+
+  /// Stop copying the mixed output and free the ring buffer.
+  /// This also restores the local output if it was muted with
+  /// [setOutputTapMuteLocal].
+  void disableOutputTap() {
+    _controller.soLoudFFI.disableOutputTap();
+  }
+
+  /// Return true if the output tap is enabled.
+  bool isOutputTapEnabled() {
+    return _controller.soLoudFFI.isOutputTapEnabled();
+  }
+
+  /// Silence the local playback device while the output tap is enabled.
+  /// The audio read with [readOutputTap] is not affected.
+  ///
+  /// [mute] whether to silence the local output.
+  void setOutputTapMuteLocal(bool mute) {
+    _controller.soLoudFFI.setOutputTapMuteLocal(mute);
+  }
+
+  /// Read the mixed output collected since the last call, as interleaved
+  /// float samples (frames * channels) at the engine sample rate.
+  ///
+  /// Returns an empty list if nothing is available or the tap is disabled.
+  ///
+  /// [maxFrames] the maximum number of frames to read.
+  Float32List readOutputTap({int maxFrames = 8192}) {
+    return _controller.soLoudFFI.readOutputTap(maxFrames, _channels.count);
+  }
+
+  /// Return the number of frames dropped since [enableOutputTap] because
+  /// [readOutputTap] was not called often enough.
+  int getOutputTapDroppedFrames() {
+    return _controller.soLoudFFI.getOutputTapDroppedFrames();
+  }
+
   /// Get the length of a loaded audio [source].
   ///
   /// Returns the length as a [Duration].

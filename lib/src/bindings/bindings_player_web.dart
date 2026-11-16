@@ -533,6 +533,34 @@ class FlutterSoLoudWeb extends FlutterSoLoud {
   }
 
   @override
+  PlayerErrors enableOutputTap(int bufferFrames) {
+    throw UnimplementedError(
+      '[enableOutputTap] in not supported on the web platfom!',
+    );
+  }
+
+  @override
+  void disableOutputTap() {}
+
+  @override
+  bool isOutputTapEnabled() {
+    return false;
+  }
+
+  @override
+  void setOutputTapMuteLocal(bool mute) {}
+
+  @override
+  Float32List readOutputTap(int maxFrames, int channels) {
+    return Float32List(0);
+  }
+
+  @override
+  int getOutputTapDroppedFrames() {
+    return 0;
+  }
+
+  @override
   bool getFft(AudioData fft) {
     final isTheSameAsBeforePtr = wasmMalloc(4);
     wasmGetWave(fft.ctrl.samplesPtr, isTheSameAsBeforePtr);

@@ -45,6 +45,61 @@ std::atomic<dartFileLoadedCallback_t> dartFileLoadedCallback{nullptr};
 std::atomic<dartStateChangedCallback_t> dartStateChangedCallback{nullptr};
 
 //////////////////////////////////////////////////////////////
+/// OUTPUT TAP
+///
+/// Copies the final mixed output into a ring buffer so it can be read
+/// from Dart (ie to stream it to a network speaker).
+/// Single producer (audio thread) / single consumer (Dart).
+
+/// Guards the buffer allocation. The audio thread only try_locks it.
+std::mutex outputTapMutex;
+float *outputTapBuffer = nullptr;
+/// Capacity in samples (frames * channels).
+uint64_t outputTapCapacity = 0;
+unsigned int outputTapChannels = 0;
+/// Monotonic sample counters. Positions in the buffer are counter % capacity.
+std::atomic<uint64_t> outputTapWritten{0};
+std::atomic<uint64_t> outputTapRead{0};
+std::atomic<uint64_t> outputTapDroppedFrames{0};
+std::atomic<bool> outputTapMuteLocal{false};
+
+void outputTapMixCallback(float *buffer, unsigned int frames,
+                          unsigned int channels) {
+  if (!outputTapMutex.try_lock())
+    return;
+  if (outputTapBuffer != nullptr && channels == outputTapChannels) {
+    const uint64_t samples = (uint64_t)frames * channels;
+    const uint64_t written = outputTapWritten.load(std::memory_order_relaxed);
+    const uint64_t read = outputTapRead.load(std::memory_order_acquire);
+    if (outputTapCapacity - (written - read) >= samples) {
+      for (uint64_t i = 0; i < samples; i++)
+        outputTapBuffer[(written + i) % outputTapCapacity] = buffer[i];
+      outputTapWritten.store(written + samples, std::memory_order_release);
+    } else {
+      // The reader is not keeping up: drop this block.
+      outputTapDroppedFrames.fetch_add(frames, std::memory_order_relaxed);
+    }
+    if (outputTapMuteLocal.load(std::memory_order_relaxed))
+      memset(buffer, 0, samples * sizeof(float));
+  }
+  outputTapMutex.unlock();
+}
+
+void outputTapRelease() {
+  std::lock_guard<std::mutex> guard(outputTapMutex);
+  if (player.get() != nullptr)
+    player.get()->soloud.setMixOutputCallback(nullptr);
+  free(outputTapBuffer);
+  outputTapBuffer = nullptr;
+  outputTapCapacity = 0;
+  outputTapChannels = 0;
+  outputTapWritten = 0;
+  outputTapRead = 0;
+  outputTapDroppedFrames = 0;
+  outputTapMuteLocal = false;
+}
+
+//////////////////////////////////////////////////////////////
 /// WEB WORKER
 
 #ifdef __EMSCRIPTEN__
@@ -312,6 +367,7 @@ FFI_PLUGIN_EXPORT void dispose() {
   dartFileLoadedCallback = nullptr;
   dartStateChangedCallback = nullptr;
   player.get()->dispose();
+  outputTapRelease();
   player.reset();
   player = nullptr;
   player = std::make_unique<Player>();
@@ -1981,6 +2037,72 @@ FFI_PLUGIN_EXPORT unsigned int busGetActiveVoiceCount(unsigned int busId) {
   if (player.get() == nullptr)
     return 0;
   return player.get()->busGetActiveVoiceCount(busId);
+}
+
+/////////////////////////////////////////
+/// output tap
+/////////////////////////////////////////
+
+/// Start copying the final mixed output into a ring buffer.
+/// Calling it again while enabled resets the buffer.
+///
+/// [bufferFrames] the ring buffer capacity in frames.
+FFI_PLUGIN_EXPORT enum PlayerErrors enableOutputTap(unsigned int bufferFrames) {
+  if (player.get() == nullptr || !player.get()->isInited())
+    return backendNotInited;
+  outputTapRelease();
+  std::lock_guard<std::mutex> guard(outputTapMutex);
+  outputTapChannels = player.get()->soloud.getBackendChannels();
+  outputTapCapacity = (uint64_t)bufferFrames * outputTapChannels;
+  outputTapBuffer = (float *)calloc(outputTapCapacity, sizeof(float));
+  if (outputTapBuffer == nullptr) {
+    outputTapCapacity = 0;
+    return outOfMemory;
+  }
+  player.get()->soloud.setMixOutputCallback(outputTapMixCallback);
+  return noError;
+}
+
+/// Stop copying the mixed output and free the ring buffer.
+FFI_PLUGIN_EXPORT void disableOutputTap() { outputTapRelease(); }
+
+/// Return 1 if the output tap is enabled.
+FFI_PLUGIN_EXPORT int isOutputTapEnabled() {
+  return outputTapBuffer != nullptr ? 1 : 0;
+}
+
+/// Silence the local playback device while the output tap is enabled.
+/// The tapped audio is not affected.
+FFI_PLUGIN_EXPORT void setOutputTapMuteLocal(bool mute) {
+  outputTapMuteLocal = mute;
+}
+
+/// Copy up to [maxFrames] interleaved frames of mixed output into [buffer].
+/// [buffer] must hold at least maxFrames * channels floats.
+///
+/// Must be called from the same thread as enable/disableOutputTap. It does not
+/// take [outputTapMutex], so the audio thread is never kept from writing.
+///
+/// Returns the number of frames copied.
+FFI_PLUGIN_EXPORT unsigned int readOutputTap(float *buffer,
+                                             unsigned int maxFrames) {
+  if (outputTapBuffer == nullptr)
+    return 0;
+  const uint64_t read = outputTapRead.load(std::memory_order_relaxed);
+  const uint64_t written = outputTapWritten.load(std::memory_order_acquire);
+  uint64_t samples = written - read;
+  const uint64_t maxSamples = (uint64_t)maxFrames * outputTapChannels;
+  if (samples > maxSamples)
+    samples = maxSamples;
+  for (uint64_t i = 0; i < samples; i++)
+    buffer[i] = outputTapBuffer[(read + i) % outputTapCapacity];
+  outputTapRead.store(read + samples, std::memory_order_release);
+  return (unsigned int)(samples / outputTapChannels);
+}
+
+/// Return the number of frames dropped because the ring buffer was full.
+FFI_PLUGIN_EXPORT unsigned int getOutputTapDroppedFrames() {
+  return (unsigned int)outputTapDroppedFrames.load();
 }
 
 #ifdef __cplusplus

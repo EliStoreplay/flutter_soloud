@@ -187,6 +187,8 @@ namespace SoLoud
         first_call = false;
         SoLoud::Soloud *soloud = (SoLoud::Soloud *)pDevice->pUserData;
         soloud->mix((float *)pOutput, frameCount);
+        if (soloud->_mixOutputCallback != nullptr)
+            soloud->_mixOutputCallback((float *)pOutput, frameCount, pDevice->playback.channels);
     }
 
     static void soloud_miniaudio_deinit(SoLoud::Soloud *aSoloud)

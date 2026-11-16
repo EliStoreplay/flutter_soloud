@@ -182,6 +182,14 @@ namespace SoLoud
 			_stateChangedCallback = stateChangedCallback;
 		}
 
+		// Set the callback to call with the final mixed output, right before it is
+		// handed to the device. Called from the audio thread: must not block.
+		// The callback may modify the buffer (ie to silence the local output).
+		void (*_mixOutputCallback)(float *aBuffer, unsigned int aFrames, unsigned int aChannels) = nullptr;
+		void setMixOutputCallback(void (*mixOutputCallback)(float *, unsigned int, unsigned int)) {
+			_mixOutputCallback = mixOutputCallback;
+		}
+
 		// CTor
 		Soloud();
 		// DTor

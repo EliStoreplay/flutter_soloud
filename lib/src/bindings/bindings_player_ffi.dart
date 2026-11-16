@@ -1038,6 +1038,81 @@ class FlutterSoLoudFfi extends FlutterSoLoud {
       .asFunction<int Function()>();
 
   @override
+  PlayerErrors enableOutputTap(int bufferFrames) {
+    final ret = _enableOutputTap(bufferFrames);
+    return PlayerErrors.values[ret];
+  }
+
+  late final _enableOutputTapPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function(ffi.UnsignedInt)>>(
+        'enableOutputTap',
+      );
+  late final _enableOutputTap = _enableOutputTapPtr
+      .asFunction<int Function(int)>();
+
+  @override
+  void disableOutputTap() {
+    return _disableOutputTap();
+  }
+
+  late final _disableOutputTapPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function()>>('disableOutputTap');
+  late final _disableOutputTap = _disableOutputTapPtr
+      .asFunction<void Function()>();
+
+  @override
+  bool isOutputTapEnabled() {
+    return _isOutputTapEnabled() == 1;
+  }
+
+  late final _isOutputTapEnabledPtr =
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('isOutputTapEnabled');
+  late final _isOutputTapEnabled = _isOutputTapEnabledPtr
+      .asFunction<int Function()>();
+
+  @override
+  void setOutputTapMuteLocal(bool mute) {
+    return _setOutputTapMuteLocal(mute);
+  }
+
+  late final _setOutputTapMuteLocalPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Bool)>>(
+        'setOutputTapMuteLocal',
+      );
+  late final _setOutputTapMuteLocal = _setOutputTapMuteLocalPtr
+      .asFunction<void Function(bool)>();
+
+  @override
+  Float32List readOutputTap(int maxFrames, int channels) {
+    final buffer = calloc<ffi.Float>(maxFrames * channels);
+    final frames = _readOutputTap(buffer, maxFrames);
+    final ret = Float32List.fromList(buffer.asTypedList(frames * channels));
+    calloc.free(buffer);
+    return ret;
+  }
+
+  late final _readOutputTapPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<ffi.Float>, ffi.UnsignedInt)
+        >
+      >('readOutputTap');
+  late final _readOutputTap = _readOutputTapPtr
+      .asFunction<int Function(ffi.Pointer<ffi.Float>, int)>();
+
+  @override
+  int getOutputTapDroppedFrames() {
+    return _getOutputTapDroppedFrames();
+  }
+
+  late final _getOutputTapDroppedFramesPtr =
+      _lookup<ffi.NativeFunction<ffi.UnsignedInt Function()>>(
+        'getOutputTapDroppedFrames',
+      );
+  late final _getOutputTapDroppedFrames = _getOutputTapDroppedFramesPtr
+      .asFunction<int Function()>();
+
+  @override
   bool getFft(AudioData fft) {
     final isTheSameAsBefore = calloc<ffi.Bool>();
     _getFft(fft.ctrl.samplesWave, isTheSameAsBefore);

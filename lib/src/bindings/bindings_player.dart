@@ -392,6 +392,42 @@ abstract class FlutterSoLoud {
   @mustBeOverridden
   bool getVisualizationEnabled();
 
+  /// Start copying the final mixed output into a ring buffer.
+  /// Not supported on the web.
+  ///
+  /// [bufferFrames] the ring buffer capacity in frames.
+  @mustBeOverridden
+  PlayerErrors enableOutputTap(int bufferFrames);
+
+  /// Stop copying the mixed output and free the ring buffer.
+  /// Not supported on the web.
+  @mustBeOverridden
+  void disableOutputTap();
+
+  /// Return true if the output tap is enabled.
+  /// Not supported on the web.
+  @mustBeOverridden
+  bool isOutputTapEnabled();
+
+  /// Silence the local playback device while the output tap is enabled.
+  /// Not supported on the web.
+  ///
+  /// [mute] whether to silence the local output.
+  @mustBeOverridden
+  void setOutputTapMuteLocal(bool mute);
+
+  /// Read up to [maxFrames] interleaved frames of mixed output.
+  /// Not supported on the web.
+  ///
+  /// [channels] the engine channel count.
+  @mustBeOverridden
+  Float32List readOutputTap(int maxFrames, int channels);
+
+  /// Return the number of frames dropped because the ring buffer was full.
+  /// Not supported on the web.
+  @mustBeOverridden
+  int getOutputTapDroppedFrames();
+
   /// Returns valid data only if VisualizationEnabled is true.
   /// Not yet supported on the web.
   ///
